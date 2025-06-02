@@ -6,7 +6,7 @@ use App\Http\Controllers\Auth\SocialLoginController;
 // Rota para exibir a tela de login
 Route::get('/login', function () {
     return view('login');
-})->name('login'); // Nome da rota para usar em href="{{ route('login') }}"
+})->name('login');
 
 // Rotas para Socialite
 Route::get('/auth/google', [SocialLoginController::class, 'redirectToGoogle'])->name('login.google');

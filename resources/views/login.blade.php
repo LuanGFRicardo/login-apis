@@ -16,7 +16,6 @@
             <i class="fab fa-facebook-f"></i> Continuar com Facebook
         </a>
         
-
         <p class="mt-4 text-muted">
             Isso é apenas um exemplo visual. A lógica de autenticação real será tratada no backend.
         </p>

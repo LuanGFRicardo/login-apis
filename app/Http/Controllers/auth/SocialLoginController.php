@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use Laravel\Socialite\Facades\Socialite;
 use App\Models\User;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Str;
 
 class SocialLoginController extends Controller
 {
@@ -27,29 +28,37 @@ class SocialLoginController extends Controller
     public function handleGoogleCallback()
     {
         try {
-            $user = Socialite::driver('google')->user();
-
-            // Aqui você pode buscar o usuário no seu banco de dados
-            // ou criar um novo se não existir.
+            $user = Socialite::driver('google')->scopes([
+                'openid',
+                'profile',
+                'email'
+            ])->user();
+            
             $findUser = User::where('google_id', $user->id)->first();
 
             if ($findUser) {
                 Auth::login($findUser);
-                return redirect('/dashboard'); // Redireciona para o painel
+                return redirect('/dashboard');
             } else {
                 $newUser = User::create([
                     'name' => $user->name,
                     'email' => $user->email,
                     'google_id' => $user->id,
-                    'password' => bcrypt('sua_senha_segura_aqui_ou_null_se_nao_usar'), // Se não usar senha, pode ser null
+                    'avatar' => $user->avatar,
+                    'nickname' => $user->nickname,
+                    'email_verified' => $user->user['email_verified'] ?? false,
+                    'locale' => $user->user['locale'] ?? null,
+                    'hd' => $user->user['hd'] ?? null,
+                    'given_name' => $user->user['given_name'] ?? null,
+                    'family_name' => $user->user['family_name'] ?? null,
+                    'password' => bcrypt(Str::random(16)), // Senha aleatória segura
                 ]);
 
                 Auth::login($newUser);
-                return redirect('/dashboard');
+                return redirect('/login');
             }
 
         } catch (\Exception $e) {
-            // Logar o erro ou exibir uma mensagem
             return redirect('/login')->with('error', 'Erro ao logar com Google: ' . $e->getMessage());
         }
     }
