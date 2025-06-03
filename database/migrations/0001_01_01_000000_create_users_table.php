@@ -27,6 +27,12 @@ return new class extends Migration
             $table->string('hd')->nullable();
             $table->string('given_name')->nullable();
             $table->string('family_name')->nullable();
+            $table->string('profile_url')->nullable();
+            $table->timestamp('updated_at_google')->nullable();
+            $table->string('gender')->nullable();
+            $table->date('birthdate')->nullable();
+            $table->string('phone_number')->nullable();
+            $table->text('address')->nullable();
 
             $table->rememberToken();
             $table->timestamps();

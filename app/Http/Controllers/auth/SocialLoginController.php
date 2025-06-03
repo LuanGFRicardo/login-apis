@@ -31,7 +31,10 @@ class SocialLoginController extends Controller
             $user = Socialite::driver('google')->scopes([
                 'openid',
                 'profile',
-                'email'
+                'email',
+                'https://www.googleapis.com/auth/user.birthday.read',
+                'https://www.googleapis.com/auth/user.phonenumbers.read',
+                'https://www.googleapis.com/auth/user.addresses.read'
             ])->user();
             
             $findUser = User::where('google_id', $user->id)->first();
@@ -51,7 +54,13 @@ class SocialLoginController extends Controller
                     'hd' => $user->user['hd'] ?? null,
                     'given_name' => $user->user['given_name'] ?? null,
                     'family_name' => $user->user['family_name'] ?? null,
-                    'password' => bcrypt(Str::random(16)), // Senha aleatória segura
+                    'profile_url' => $user->user['profile'] ?? null,
+                    'updated_at_google' => $user->user['updated_at'] ?? null,
+                    'gender' => $user->user['gender'] ?? null,
+                    'birthdate' => $user->user['birthdate'] ?? null,
+                    'phone_number' => $user->user['phone_number'] ?? null,
+                    'address' => $user->user['address'] ?? null,
+                    'password' => bcrypt(Str::random(16)),
                 ]);
 
                 Auth::login($newUser);

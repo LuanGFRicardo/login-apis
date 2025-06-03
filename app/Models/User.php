@@ -29,6 +29,12 @@ class User extends Authenticatable
         'hd',
         'given_name',
         'family_name',
+        'profile_url',
+        'updated_at_google',
+        'gender',
+        'birthdate',
+        'phone_number',
+        'address',
     ];
 
     /**
