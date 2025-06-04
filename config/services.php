@@ -45,9 +45,12 @@ return [
         'client_id' => env('MICROSOFT_CLIENT_ID'),
         'client_secret' => env('MICROSOFT_CLIENT_SECRET'),
         'redirect' => env('MICROSOFT_REDIRECT_URI'),
+        'authorize_url' => 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize',
+        'token_url' => 'https://login.microsoftonline.com/common/oauth2/v2.0/token',
+        'resource_url' => 'https://graph.microsoft.com/v1.0/me',
     ],
 
-    'facebook' => [ // Socialite usa 'facebook' para Meta
+    'facebook' => [
         'client_id' => env('FACEBOOK_CLIENT_ID'),
         'client_secret' => env('FACEBOOK_CLIENT_SECRET'),
         'redirect' => env('FACEBOOK_REDIRECT_URI'),

@@ -8,6 +8,10 @@ Route::get('/login', function () {
     return view('login');
 })->name('login');
 
+Route::get('/', function () {
+    return view('login');
+})->name('login');
+
 // Rotas para Socialite
 Route::get('/auth/google', [SocialLoginController::class, 'redirectToGoogle'])->name('login.google');
 Route::get('/auth/google/callback', [SocialLoginController::class, 'handleGoogleCallback']);

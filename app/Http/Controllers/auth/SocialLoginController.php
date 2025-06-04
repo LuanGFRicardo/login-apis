@@ -5,8 +5,13 @@ namespace App\Http\Controllers\Auth;
 use App\Http\Controllers\Controller;
 use Laravel\Socialite\Facades\Socialite;
 use App\Models\User;
+use App\Models\UserMicrosoft;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class SocialLoginController extends Controller
 {
@@ -36,12 +41,18 @@ class SocialLoginController extends Controller
                 'https://www.googleapis.com/auth/user.phonenumbers.read',
                 'https://www.googleapis.com/auth/user.addresses.read'
             ])->user();
-            
+
+            if (!$user || !$user->id) {
+                Log::warning('Callback Google sem dados de usuário ou ID.');
+                return redirect('/login')->with('error', 'Não foi possível obter os dados do Google.');
+            }
+
             $findUser = User::where('google_id', $user->id)->first();
 
             if ($findUser) {
                 Auth::login($findUser);
-                return redirect('/dashboard');
+
+                return redirect('/login')->with('success', 'Login com Google realizado com sucesso!');
             } else {
                 $newUser = User::create([
                     'name' => $user->name,
@@ -57,17 +68,20 @@ class SocialLoginController extends Controller
                     'profile_url' => $user->user['profile'] ?? null,
                     'updated_at_google' => $user->user['updated_at'] ?? null,
                     'gender' => $user->user['gender'] ?? null,
-                    'birthdate' => $user->user['birthdate'] ?? null,
+                    'birthdate' => isset($user->user['birthdate']) ? Carbon::parse($user->user['birthdate']) : null,
                     'phone_number' => $user->user['phone_number'] ?? null,
                     'address' => $user->user['address'] ?? null,
                     'password' => bcrypt(Str::random(16)),
                 ]);
 
-                Auth::login($newUser);
-                return redirect('/login');
+                return redirect('/login')->with('success', 'Conta Google registrada com sucesso!');
             }
 
         } catch (\Exception $e) {
+            Log::error('Erro ao logar com Google: ' . $e->getMessage(), [
+                'exception' => $e
+            ]);
+
             return redirect('/login')->with('error', 'Erro ao logar com Google: ' . $e->getMessage());
         }
     }
@@ -79,7 +93,15 @@ class SocialLoginController extends Controller
      */
     public function redirectToMicrosoft()
     {
-        return Socialite::driver('microsoft')->redirect();
+        $query = http_build_query([
+            'client_id' => config('services.microsoft.client_id'),
+            'redirect_uri' => config('services.microsoft.redirect'),
+            'response_type' => 'code',
+            'scope' => 'openid profile email offline_access User.Read',
+            'response_mode' => 'query',
+        ]);
+
+        return redirect(config('services.microsoft.authorize_url') . '?' . $query);
     }
 
     /**
@@ -87,33 +109,98 @@ class SocialLoginController extends Controller
      *
      * @return \Illuminate\Http\Response
      */
-    public function handleMicrosoftCallback()
+    public function handleMicrosoftCallback(Request $request)
     {
         try {
-            $user = Socialite::driver('microsoft')->user();
+            $code = $request->get('code');
 
-            $findUser = User::where('microsoft_id', $user->id)->first();
-
-            if ($findUser) {
-                Auth::login($findUser);
-                return redirect('/dashboard');
-            } else {
-                $newUser = User::create([
-                    'name' => $user->name,
-                    'email' => $user->email,
-                    'microsoft_id' => $user->id,
-                    'password' => bcrypt('sua_senha_segura_aqui_ou_null_se_nao_usar'),
-                ]);
-
-                Auth::login($newUser);
-                return redirect('/dashboard');
+            if (!$code) {
+                Log::warning('Callback Microsoft sem código');
+                return redirect('/login')->with('error', 'Código ausente.');
             }
 
+            $tokenResponse = Http::asForm()->post(config('services.microsoft.token_url'), [
+                'client_id' => config('services.microsoft.client_id'),
+                'client_secret' => config('services.microsoft.client_secret'),
+                'code' => $code,
+                'redirect_uri' => config('services.microsoft.redirect'),
+                'grant_type' => 'authorization_code',
+            ]);
+
+            if ($tokenResponse->failed()) {
+                Log::error('Token Microsoft falhou', [
+                    'status' => $tokenResponse->status(),
+                    'body' => $tokenResponse->body()
+                ]);
+                return redirect('/login')->with('error', 'Falha ao obter token.');
+            }
+
+            $tokenData = $tokenResponse->json();
+
+            $accessToken = $tokenData['access_token'];
+            $refreshToken = $tokenData['refresh_token'] ?? null;
+            $expiresIn = $tokenData['expires_in'];
+
+            $userResponse = Http::withToken($accessToken)->get(config('services.microsoft.resource_url'));
+
+            if ($userResponse->failed()) {
+                Log::error('Falha ao obter dados do usuário', [
+                    'status' => $userResponse->status(),
+                    'body' => $userResponse->body()
+                ]);
+                return redirect('/login')->with('error', 'Falha ao obter dados do usuário.');
+            }
+
+            $user = $userResponse->json();
+
+            $microsoftId = $user['id'] ?? null;
+
+            if (!$microsoftId) {
+                Log::error('Falha ao obter id do usuário', [
+                    'status' => $userResponse->status(),
+                    'body' => $userResponse->body()
+                ]);
+                return redirect('/login')->with('error', 'ID do usuário não encontrado.');
+            }
+
+            $findUser = UserMicrosoft::where('microsoft_id', $microsoftId)->first();
+
+            if ($findUser) {
+                $findUser->update([
+                    'microsoft_access_token' => $accessToken,
+                    'microsoft_refresh_token' => $refreshToken,
+                    'microsoft_token_expires_at' => now()->addSeconds($expiresIn),
+                ]);
+
+                return redirect('/login')->with('success', 'Login com Microsoft realizado com sucesso!');
+            } else {
+                $newUser = UserMicrosoft::create([
+                    'microsoft_id' => $microsoftId,
+                    'display_name' => $user['displayName'] ?? null,
+                    'given_name' => $user['givenName'] ?? null,
+                    'surname' => $user['surname'] ?? null,
+                    'user_principal_name' => $user['userPrincipalName'] ?? null,
+                    'mail' => $user['mail'] ?? null,
+                    'mobile_phone' => $user['mobilePhone'] ?? null,
+                    'business_phones' => json_encode($user['businessPhones'] ?? []),
+                    'job_title' => $user['jobTitle'] ?? null,
+                    'company_name' => $user['companyName'] ?? null,
+                    'office_location' => $user['officeLocation'] ?? null,
+                    'preferred_language' => $user['preferredLanguage'] ?? null,
+                    'microsoft_access_token' => $accessToken,
+                    'microsoft_refresh_token' => $refreshToken,
+                    'microsoft_token_expires_at' => now()->addSeconds($expiresIn),
+                    'microsoft_avatar' => null,
+                ]);
+
+                return redirect('/login')->with('success', 'Conta Microsoft registrada com sucesso!');
+            }
         } catch (\Exception $e) {
-            return redirect('/login')->with('error', 'Erro ao logar com Microsoft: ' . $e->getMessage());
+            Log::error('Erro ao salvar usuário Microsoft: ' . $e->getMessage());
+            return redirect('/login')->with('error', 'Erro interno ao salvar dados.');
         }
     }
-
+    
     /**
      * Redireciona o usuário para a página de autenticação da Meta (Facebook).
      *
@@ -138,7 +225,7 @@ class SocialLoginController extends Controller
 
             if ($findUser) {
                 Auth::login($findUser);
-                return redirect('/dashboard');
+                return redirect('/login');
             } else {
                 $newUser = User::create([
                     'name' => $user->name,
@@ -148,7 +235,7 @@ class SocialLoginController extends Controller
                 ]);
 
                 Auth::login($newUser);
-                return redirect('/dashboard');
+                return redirect('/login');
             }
 
         } catch (\Exception $e) {
