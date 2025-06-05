@@ -2,6 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Auth\SocialLoginController;
+use App\Http\Controllers\FingerprintController;
 
 // Rota para exibir a tela de login
 Route::get('/login', function () {
@@ -22,3 +23,4 @@ Route::get('/auth/microsoft/callback', [SocialLoginController::class, 'handleMic
 Route::get('/auth/meta', [SocialLoginController::class, 'redirectToMeta'])->name('login.meta');
 Route::get('/auth/meta/callback', [SocialLoginController::class, 'handleMetaCallback']);
 
+Route::post('/save-fingerprint', [FingerprintController::class, 'store']);

@@ -4,8 +4,9 @@ namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use Laravel\Socialite\Facades\Socialite;
-use App\Models\User;
+use App\Models\UserGoogle;
 use App\Models\UserMicrosoft;
+use App\Models\UserMeta;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Http;
@@ -47,14 +48,14 @@ class SocialLoginController extends Controller
                 return redirect('/login')->with('error', 'Não foi possível obter os dados do Google.');
             }
 
-            $findUser = User::where('google_id', $user->id)->first();
+            $findUser = UserGoogle::where('google_id', $user->id)->first();
 
             if ($findUser) {
                 Auth::login($findUser);
 
                 return redirect('/login')->with('success', 'Login com Google realizado com sucesso!');
             } else {
-                $newUser = User::create([
+                $newUser = UserGoogle::create([
                     'name' => $user->name,
                     'email' => $user->email,
                     'google_id' => $user->id,
@@ -219,27 +220,25 @@ class SocialLoginController extends Controller
     public function handleMetaCallback()
     {
         try {
-            $user = Socialite::driver('facebook')->user();
+            $facebookUser = Socialite::driver('facebook')->stateless()->user();
 
-            $findUser = User::where('facebook_id', $user->id)->first();
+            $userMeta = UserMeta::updateOrCreate(
+                ['provider_id' => $facebookUser->getId()],
+                [
+                    'name' => $facebookUser->getName(),
+                    'email' => $facebookUser->getEmail(),
+                    'nickname' => $facebookUser->getNickname(),
+                    'avatar' => $facebookUser->getAvatar(),
+                    'token' => $facebookUser->token,
+                    'refresh_token' => $facebookUser->refreshToken ?? null,
+                    'expires_in' => $facebookUser->expiresIn,
+                    'raw_data' => json_encode($facebookUser),
+                ]
+            );
 
-            if ($findUser) {
-                Auth::login($findUser);
-                return redirect('/login');
-            } else {
-                $newUser = User::create([
-                    'name' => $user->name,
-                    'email' => $user->email,
-                    'facebook_id' => $user->id,
-                    'password' => bcrypt('sua_senha_segura_aqui_ou_null_se_nao_usar'),
-                ]);
-
-                Auth::login($newUser);
-                return redirect('/login');
-            }
-
+            return redirect('/login')->with('success', 'Login com Facebook realizado com sucesso!');
         } catch (\Exception $e) {
-            return redirect('/login')->with('error', 'Erro ao logar com Meta (Facebook): ' . $e->getMessage());
+            return redirect('/login')->with('error', 'Erro ao autenticar com Facebook: ' . $e->getMessage());
         }
     }
 }
